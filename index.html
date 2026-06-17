@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #0a0a0a;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+    <script>
+        (function() {
+            const canvas = document.getElementById('particleCanvas');
+            const ctx = canvas.getContext('2d');
+
+            let width, height;
+            let particles = [];
+            const mouse = { x: -1000, y: -1000 };
+            const REPEL_RADIUS = 120;
+            const REPEL_FORCE = 0.18;
+
+            function getTextPoints(text, fontSize, fontFamily) {
+                const offCanvas = document.createElement('canvas');
+                const offCtx = offCanvas.getContext('2d');
+
+                offCtx.font = `bold ${fontSize}px ${fontFamily}`;
+                const metrics = offCtx.measureText(text);
+                const textWidth = Math.ceil(metrics.width);
+                const textHeight = Math.ceil(fontSize * 1.5);
+                offCanvas.width = textWidth;
+                offCanvas.height = textHeight;
+                offCtx.font = `bold ${fontSize}px ${fontFamily}`;
+                offCtx.fillStyle = '#fff';
+                offCtx.textBaseline = 'top';
+                offCtx.fillText(text, 0, 0);
+
+                const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height).data;
+                const points = [];
+                const step = 2;
+                for (let y = 0; y < offCanvas.height; y += step) {
+                    for (let x = 0; x < offCanvas.width; x += step) {
+                        const alpha = imageData[(y * offCanvas.width + x) * 4 + 3];
+                        if (alpha > 128) {
+                            points.push({ x, y });
+                        }
+                    }
+                }
+                let minY = Infinity, maxY = -Infinity;
+                points.forEach(p => {
+                    if (p.y < minY) minY = p.y;
+                    if (p.y > maxY) maxY = p.y;
+                });
+                const actualHeight = maxY - minY + 1;
+                return { points, width: textWidth, height: actualHeight, minY };
+            }
+
+            class Particle {
+                constructor(targetX, targetY) {
+                    this.targetX = targetX;
+                    this.targetY = targetY;
+                    this.x = Math.random() * width;
+                    this.y = Math.random() * height;
+                    this.vx = 0;
+                    this.vy = 0;
+                    this.size = Math.random() * 1.8 + 0.8;
+                    this.color = `rgba(255, 255, 255, ${Math.random() * 0.5 + 0.5})`;
+                }
+
+                update() {
+                    const dx = this.targetX - this.x;
+                    const dy = this.targetY - this.y;
+                    this.vx += dx * 0.02;
+                    this.vy += dy * 0.02;
+
+                    const mx = mouse.x - this.x;
+                    const my = mouse.y - this.y;
+                    const distToMouse = Math.sqrt(mx * mx + my * my);
+                    if (distToMouse < REPEL_RADIUS && distToMouse > 0) {
+                        const force = (REPEL_RADIUS - distToMouse) / REPEL_RADIUS;
+                        const angle = Math.atan2(my, mx);
+                        this.vx -= Math.cos(angle) * force * REPEL_FORCE * 5;
+                        this.vy -= Math.sin(angle) * force * REPEL_FORCE * 5;
+                    }
+
+                    this.vx *= 0.92;
+                    this.vy *= 0.92;
+                    this.x += this.vx;
+                    this.y += this.vy;
+                }
+
+                draw(ctx) {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.fill();
+                }
+            }
+
+            function initParticles(points, offsetX, offsetY) {
+                particles = [];
+                for (let i = 0; i < points.length; i++) {
+                    const pt = points[i];
+                    const tx = offsetX + pt.x + (Math.random() - 0.5) * 3;
+                    const ty = offsetY + pt.y + (Math.random() - 0.5) * 3;
+                    particles.push(new Particle(tx, ty));
+                }
+            }
+
+            function resize() {
+                width = window.innerWidth;
+                height = window.innerHeight;
+                canvas.width = width;
+                canvas.height = height;
+
+                const fontSize = Math.min(width * 0.22, height * 0.35, 260);
+                const { points, width: tw, height: th, minY } = getTextPoints('404', fontSize, 'Inter, system-ui, sans-serif');
+                const offsetX = (width - tw) / 2;
+                const offsetY = (height - th) / 2 - minY;
+
+                if (particles.length === 0) {
+                    initParticles(points, offsetX, offsetY);
+                } else {
+                    for (let i = 0; i < particles.length; i++) {
+                        const pt = points[i % points.length];
+                        particles[i].targetX = offsetX + pt.x + (Math.random() - 0.5) * 3;
+                        particles[i].targetY = offsetY + pt.y + (Math.random() - 0.5) * 3;
+                    }
+                }
+            }
+
+            function animate() {
+                ctx.clearRect(0, 0, width, height);
+                for (const p of particles) {
+                    p.update();
+                    p.draw(ctx);
+                }
+                requestAnimationFrame(animate);
+            }
+
+            window.addEventListener('mousemove', (e) => {
+                mouse.x = e.clientX;
+                mouse.y = e.clientY;
+            });
+            window.addEventListener('mouseleave', () => {
+                mouse.x = -1000;
+                mouse.y = -1000;
+            });
+            window.addEventListener('touchmove', (e) => {
+                if (e.touches.length > 0) {
+                    mouse.x = e.touches[0].clientX;
+                    mouse.y = e.touches[0].clientY;
+                }
+            }, { passive: true });
+            window.addEventListener('touchend', () => {
+                mouse.x = -1000;
+                mouse.y = -1000;
+            });
+
+            window.addEventListener('resize', resize);
+            resize();
+            animate();
+        })();
+    </script>
+</body>
+</html>
